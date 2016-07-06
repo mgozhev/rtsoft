@@ -10,11 +10,14 @@ PARAM := $(HOST_PARAM)
 
 obj-m = blackboard.o
 
+all: modules clients
+
 modules:
 	make $(PARAM) -C $(KDIR) M=$(PWD) modules
 
 clean:
 	make $(PARAM) -C $(KDIR) M=$(PWD) clean
+	rm -f read write
 
 CC = gcc
 
