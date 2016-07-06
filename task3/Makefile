@@ -7,10 +7,7 @@ HOST_PARAM =
 obj-m = blackboard.o
 
 all: module_host
-
-
 clean: module_host_clean
-
 
 module_host:
 	make $(HOST_PARAM) -C $(HOST_KDIR) M=$(PWD) modules
