@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
+#include <string.h>
 
 #define DEVICE "/dev/blackboard"
 
@@ -13,16 +14,19 @@ main (void)
         exit (1);
     }
     
-    char *word = "wordn ";
+  
+/*    write (fd, word, strlen(word)); */
 
     int i;
+    char c;
     while (1) {
         for (i = 0; i <= 9; i++) {
-            word[4] = '0' + i;
-            write (fd, word, 6);
+            c = '0' + i;
+            write (fd, "word", 4);
+            write (fd, &c, 1);
+            write (fd, " ", 1);
         }
     }
-
 
     close (fd);
 

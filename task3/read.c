@@ -18,6 +18,7 @@ main (void)
         read (fd, &c, 1);
 
         fprintf (stdout, "%c", c);
+        fflush (stdout);
     }
 
     close (fd);
