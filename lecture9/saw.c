@@ -7,8 +7,16 @@
 #include <linux/wait.h>
 #include <linux/io.h>
 #include <asm/uaccess.h>
+#include <linux/kthread.h>
+#include <linux/delay.h>
+#include <linux/mutex.h>
+
 
 #define CBUF_SIZE 32
+
+#define DEVICE "saw"
+
+DEFINE_MUTEX(cbuf_lock);
 
 static DECLARE_WAIT_QUEUE_HEAD(wq);
 static int flag = 0;
@@ -20,6 +28,44 @@ static int blackboard_count = 1;
 static dev_t blackboard_dev; /* Dynamically allocated now. = MKDEV (202, 0); */
 
 static struct cdev blackboard_cdev;
+
+
+#define SAW_MAX 100
+
+struct task_struct *ts;
+int thread (void *data)
+{
+	int n;
+	n = 0;
+	while (1)
+	{
+		mutex_lock(&cbuf_lock);
+		cbuffer[cbuf_end] = n;
+		cbuf_end = (cbuf_end + 1) % CBUF_SIZE;
+		if (cbuf_begin==cbuf_end) {
+			cbuf_begin = (cbuf_begin + 1) % CBUF_SIZE;
+			
+		}
+		else {
+			cbuf_len++;
+		}
+
+		mutex_unlock(&cbuf_lock);
+        	
+		flag = 1;
+        	wake_up_interruptible(&wq);
+
+
+		n++;
+		if (n > SAW_MAX) n = 0;
+		
+	
+		msleep (100);
+		if (kthread_should_stop()) break;
+	}
+	return 0;
+}
+
 
 static int
 blackboard_release (struct inode *inode, struct file *file)
@@ -38,13 +84,15 @@ static ssize_t
 blackboard_read (struct file *file, char __user *buf, size_t count, 
         loff_t *f_pos)
 {
-    size_t transfer_size;
+    size_t transfer_size=0;
+
 	
 
         if (cbuf_len == 0) {
             wait_event_interruptible (wq, flag != 0);
         }
         
+	mutex_lock(&cbuf_lock);
         transfer_size = count < cbuf_len ? count : cbuf_len;
         
         if (cbuf_begin + transfer_size > CBUF_SIZE) {
@@ -60,11 +108,14 @@ blackboard_read (struct file *file, char __user *buf, size_t count,
        
         cbuf_len -= transfer_size;
         cbuf_begin = (cbuf_begin + transfer_size) % CBUF_SIZE;
-        
+	
+	mutex_unlock(&cbuf_lock);
+       
+
+ 
         flag = 0;
         wake_up_interruptible(&wq);
         
-
     return transfer_size;
 }
 
@@ -74,10 +125,15 @@ blackboard_write (struct file *file, const char __user *buf, size_t count,
 {
     size_t transfer_size;
     size_t total_transfer;
+	
+
+	return -EIO;
 
     total_transfer = count;
 
+	printk("wr: cnt-%d\n", count);
     while (total_transfer) {
+	printk("wr: tt-%d\n", total_transfer);
         if (cbuf_len == CBUF_SIZE) {
             wait_event_interruptible (wq, flag != 1);
         }
@@ -104,9 +160,13 @@ blackboard_write (struct file *file, const char __user *buf, size_t count,
         flag = 1;
 
         wake_up_interruptible (&wq);
-
+	if (0==total_transfer)
+            wait_event_interruptible (wq, flag != 1);
+	printk("wr: ts-%d\n", transfer_size);
 	total_transfer -= transfer_size;
     }
+
+	printk("wr: end\n");
 
 	
     return count;
@@ -125,9 +185,11 @@ static int __init
 blackboard_init (void)
 {
     cbuf_begin = cbuf_end = cbuf_len = 0; 
-    
+   
+	ts = kthread_run (thread, NULL, "saw signal thread");
+ 
     if (alloc_chrdev_region (&blackboard_dev, 0, blackboard_count, 
-                "blackboard")) {
+                DEVICE)) {
 		return -ENODEV;
 	}
 
@@ -144,6 +206,7 @@ blackboard_init (void)
 static void __exit 
 blackboard_exit (void)
 {
+	kthread_stop (ts);
 	cdev_del (&blackboard_cdev);
 	unregister_chrdev_region (blackboard_dev, blackboard_count);
 }
@@ -152,6 +215,6 @@ module_init (blackboard_init);
 module_exit (blackboard_exit);
 
 MODULE_LICENSE ("GPL");
-MODULE_DESCRIPTION ("Blackboard: cyclic buffer device.");
+MODULE_DESCRIPTION ("cyclic buffer device.");
 MODULE_AUTHOR ("student");
 
