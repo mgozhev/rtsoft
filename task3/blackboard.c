@@ -40,28 +40,30 @@ blackboard_read (struct file *file, char __user *buf, size_t count,
 {
     size_t transfer_size;
 	
-    if (cbuf_len == 0) {
-        wait_event_interruptible (wq, flag != 0);
-    }
-    
-    flag = 0;
-    wake_up_interruptible(&wq);
-    
-    transfer_size = count < cbuf_len ? count : cbuf_len;
-	
-    if (cbuf_begin + transfer_size > CBUF_SIZE) {
-        if (copy_to_user (buf, cbuffer + cbuf_begin, CBUF_SIZE - cbuf_begin))
-            return -EFAULT;
-        if (copy_to_user (buf + (CBUF_SIZE - cbuf_begin), cbuffer, 
-                    transfer_size - (CBUF_SIZE - cbuf_begin)))
-            return -EFAULT;
-    } else {
-        if (copy_to_user (buf, cbuffer + cbuf_begin, transfer_size))
-            return -EFAULT;
-    }
-    
-    cbuf_len -= transfer_size;
-    cbuf_begin = (cbuf_begin + transfer_size) % CBUF_SIZE;
+
+        if (cbuf_len == 0) {
+            wait_event_interruptible (wq, flag != 0);
+        }
+        
+        transfer_size = count < cbuf_len ? count : cbuf_len;
+        
+        if (cbuf_begin + transfer_size > CBUF_SIZE) {
+            if (copy_to_user (buf, cbuffer + cbuf_begin, CBUF_SIZE - cbuf_begin))
+                return -EFAULT;
+            if (copy_to_user (buf + (CBUF_SIZE - cbuf_begin), cbuffer, 
+                        transfer_size - (CBUF_SIZE - cbuf_begin)))
+                return -EFAULT;
+        } else {
+            if (copy_to_user (buf, cbuffer + cbuf_begin, transfer_size))
+                return -EFAULT;
+        }
+       
+        cbuf_len -= transfer_size;
+        cbuf_begin = (cbuf_begin + transfer_size) % CBUF_SIZE;
+        
+        flag = 0;
+        wake_up_interruptible(&wq);
+        
 
     return transfer_size;
 }
@@ -70,34 +72,44 @@ static ssize_t
 blackboard_write (struct file *file, const char __user *buf, size_t count,
 	   loff_t *f_pos)
 {
-	size_t transfer_size;
+    size_t transfer_size;
+    size_t total_transfer;
 
-    if (cbuf_len == CBUF_SIZE) {
-        wait_event_interruptible (wq, flag != 1);
+    total_transfer = count;
+
+    while (total_transfer) {
+        if (cbuf_len == CBUF_SIZE) {
+            wait_event_interruptible (wq, flag != 1);
+        }
+       
+        transfer_size = total_transfer < CBUF_SIZE - cbuf_len ?
+                total_transfer : CBUF_SIZE - cbuf_len;
+
+        if (cbuf_end + transfer_size > CBUF_SIZE) {
+            if (copy_from_user (cbuffer + cbuf_end, buf, CBUF_SIZE - cbuf_end))
+                return -EFAULT;
+            if (copy_from_user (cbuffer, buf + (CBUF_SIZE - cbuf_end), 
+                        transfer_size - (CBUF_SIZE - cbuf_end)))
+                return -EFAULT;
+
+        } else {
+            if (copy_from_user (cbuffer + cbuf_end, buf, transfer_size))
+                return -EFAULT;
+        }
+	
+	buf += transfer_size;
+        cbuf_len += transfer_size;
+        cbuf_end = (cbuf_end + transfer_size) % CBUF_SIZE;
+        
+        flag = 1;
+
+        wake_up_interruptible (&wq);
+
+	total_transfer -= transfer_size;
     }
-    
-    flag = 1;
-    wake_up_interruptible (&wq);
 
-    transfer_size = count < CBUF_SIZE - cbuf_len ?
-            count : CBUF_SIZE - cbuf_len;
-    
-    if (cbuf_end + transfer_size > CBUF_SIZE) {
-        if (copy_from_user (cbuffer + cbuf_end, buf, CBUF_SIZE - cbuf_end))
-            return -EFAULT;
-        if (copy_from_user (cbuffer, buf + (CBUF_SIZE - cbuf_end), 
-                    transfer_size - (CBUF_SIZE - cbuf_end)))
-            return -EFAULT;
-
-    } else {
-        if (copy_from_user (cbuffer + cbuf_end, buf, transfer_size))
-            return -EFAULT;
-    }
-
-    cbuf_len += transfer_size;
-    cbuf_end = (cbuf_end + transfer_size) % CBUF_SIZE;
-
-    return transfer_size;
+	
+    return count;
 }
 
 static const struct file_operations 
