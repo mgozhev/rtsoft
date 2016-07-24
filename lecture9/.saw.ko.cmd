@@ -1,0 +1,1 @@
+cmd_/home/mgozhev/training/lecture9/saw.ko := ld -r -m elf_x86_64 -T ./scripts/module-common.lds --build-id  -o /home/mgozhev/training/lecture9/saw.ko /home/mgozhev/training/lecture9/saw.o /home/mgozhev/training/lecture9/saw.mod.o

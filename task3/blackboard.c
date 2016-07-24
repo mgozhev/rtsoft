@@ -38,14 +38,16 @@ static ssize_t
 blackboard_read (struct file *file, char __user *buf, size_t count, 
         loff_t *f_pos)
 {
-    size_t transfer_size;
+    size_t transfer_size=0;
 	
 
         if (cbuf_len == 0) {
             wait_event_interruptible (wq, flag != 0);
         }
         
+//	printk("rd1: cnt-%d cbl-%d ts-%d\n", count, cbuf_len, transfer_size);
         transfer_size = count < cbuf_len ? count : cbuf_len;
+	printk("rd2: cnt-%d cbl-%d ts-%d\n", count, cbuf_len, transfer_size);
         
         if (cbuf_begin + transfer_size > CBUF_SIZE) {
             if (copy_to_user (buf, cbuffer + cbuf_begin, CBUF_SIZE - cbuf_begin))
@@ -57,6 +59,7 @@ blackboard_read (struct file *file, char __user *buf, size_t count,
             if (copy_to_user (buf, cbuffer + cbuf_begin, transfer_size))
                 return -EFAULT;
         }
+	printk("rd3: cnt-%d cbl-%d ts-%d\n", count, cbuf_len, transfer_size);
        
         cbuf_len -= transfer_size;
         cbuf_begin = (cbuf_begin + transfer_size) % CBUF_SIZE;
@@ -64,7 +67,6 @@ blackboard_read (struct file *file, char __user *buf, size_t count,
         flag = 0;
         wake_up_interruptible(&wq);
         
-
     return transfer_size;
 }
 
@@ -77,7 +79,9 @@ blackboard_write (struct file *file, const char __user *buf, size_t count,
 
     total_transfer = count;
 
+	printk("wr: cnt-%d\n", count);
     while (total_transfer) {
+	printk("wr: tt-%d\n", total_transfer);
         if (cbuf_len == CBUF_SIZE) {
             wait_event_interruptible (wq, flag != 1);
         }
@@ -104,9 +108,13 @@ blackboard_write (struct file *file, const char __user *buf, size_t count,
         flag = 1;
 
         wake_up_interruptible (&wq);
-
+	if (0==total_transfer)
+            wait_event_interruptible (wq, flag != 1);
+	printk("wr: ts-%d\n", transfer_size);
 	total_transfer -= transfer_size;
     }
+
+	printk("wr: end\n");
 
 	
     return count;

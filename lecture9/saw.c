@@ -10,6 +10,7 @@
 #include <linux/kthread.h>
 #include <linux/delay.h>
 #include <linux/mutex.h>
+#include <linux/debugfs.h>
 
 
 #define CBUF_SIZE 32
@@ -111,7 +112,7 @@ blackboard_read (struct file *file, char __user *buf, size_t count,
 	
 	mutex_unlock(&cbuf_lock);
        
-
+//	*(int *)0=0;
  
         flag = 0;
         wake_up_interruptible(&wq);
@@ -199,7 +200,7 @@ blackboard_init (void)
 	    unregister_chrdev_region (blackboard_dev, blackboard_count);
 		return -ENODEV;
 	}
-
+debugfs_create_file ("saw",0666,0,0,&blackboard_fops);
     return 0;
 }
 
